@@ -16,9 +16,7 @@
 
 > A complete shopping experience from product discovery to delivery-ready order management, with a dedicated admin workspace behind it.
 
-<div align="center">
-  <sub>Product demo video coming soon</sub>
-</div>
+
 
 ## Why Grocery Shop?
 
