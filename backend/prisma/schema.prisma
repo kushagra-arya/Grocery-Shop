@@ -1,0 +1,270 @@
+// Prisma Schema for Grocery Shop E-commerce
+// Database: PostgreSQL (Production-ready)
+// ORM: Prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== TABLES ====================
+
+// Users Table - Stores both customers and admins
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  firstName     String    @map("first_name")
+  lastName      String    @map("last_name")
+  phone         String?
+  avatar        String?
+  role          String    @default("CUSTOMER") // CUSTOMER, ADMIN
+  isActive      Boolean   @default(true) @map("is_active")
+  lastLogin     DateTime? @map("last_login")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  addresses      Address[]
+  cartItems      CartItem[]
+  orders         Order[]
+  reviews        Review[]
+  refreshTokens  RefreshToken[]
+  inventoryLogs  InventoryLog[]  @relation("AdminInventoryLogs")
+
+  @@map("users")
+}
+
+// Refresh Tokens - For JWT refresh token management
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// Addresses Table - User shipping/billing addresses
+model Address {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  fullName   String   @map("full_name")
+  phone      String
+  street     String
+  landmark   String?
+  city       String
+  state      String
+  postalCode String   @map("postal_code")
+  country    String   @default("India")
+  isDefault  Boolean  @default(false) @map("is_default")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@map("addresses")
+}
+
+// Categories Table - Product categories
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  imageUrl    String?  @map("image_url")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  products Product[]
+
+  @@map("categories")
+}
+
+// Products Table - Store products
+model Product {
+  id            String   @id @default(uuid())
+  name          String
+  slug          String   @unique
+  description   String
+  price         Float
+  comparePrice  Float?   @map("compare_price")
+  sku           String?  @unique
+  categoryId    String   @map("category_id")
+  stockQuantity Int      @default(0) @map("stock_quantity")
+  lowStockAlert Int      @default(10) @map("low_stock_alert")
+  unit          String   @default("piece") // piece, kg, liter, etc.
+  isActive      Boolean  @default(true) @map("is_active")
+  isFeatured    Boolean  @default(false) @map("is_featured")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  category      Category       @relation(fields: [categoryId], references: [id])
+  images        ProductImage[]
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+  reviews       Review[]
+  inventoryLogs InventoryLog[]
+
+  @@map("products")
+}
+
+// Product Images Table - Multiple images per product
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  imageUrl  String   @map("image_url")
+  altText   String?  @map("alt_text")
+  isPrimary Boolean  @default(false) @map("is_primary")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_images")
+}
+
+// Cart Items Table - User shopping cart
+model CartItem {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("cart_items")
+}
+
+// Orders Table - Customer orders
+model Order {
+  id              String   @id @default(uuid())
+  orderNumber     String   @unique @map("order_number")
+  userId          String   @map("user_id")
+  addressId       String?  @map("address_id")
+  subtotal        Float
+  tax             Float    @default(0)
+  shippingCharge  Float    @default(0) @map("shipping_charge")
+  discount        Float    @default(0)
+  totalAmount     Float    @map("total_amount")
+  status          String   @default("PENDING") // PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user       User        @relation(fields: [userId], references: [id])
+  address    Address?    @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  orderItems OrderItem[]
+  payment    Payment?
+
+  @@map("orders")
+}
+
+// Order Items Table - Individual items in an order
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String   @map("order_id")
+  productId String   @map("product_id")
+  quantity  Int
+  unitPrice Float    @map("unit_price")
+  total     Float
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+// Payments Table - Payment records
+model Payment {
+  id            String    @id @default(uuid())
+  orderId       String    @unique @map("order_id")
+  amount        Float
+  method        String    // CARD, UPI, COD, WALLET
+  status        String    @default("PENDING") // PENDING, COMPLETED, FAILED, REFUNDED
+  transactionId String?   @map("transaction_id")
+  paidAt        DateTime? @map("paid_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+// Reviews Table - Product reviews and ratings
+model Review {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  productId        String   @map("product_id")
+  rating           Int      // 1-5 stars
+  title            String?
+  comment          String?
+  verifiedPurchase Boolean  @default(false) @map("verified_purchase")
+  helpfulCount     Int      @default(0) @map("helpful_count")
+  isVisible        Boolean  @default(true) @map("is_visible")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("reviews")
+}
+
+// Contact Messages Table - Customer inquiries from contact form
+model ContactMessage {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  subject   String
+  message   String
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("contact_messages")
+}
+
+// Inventory Logs Table - Track stock changes
+model InventoryLog {
+  id          String   @id @default(uuid())
+  productId   String   @map("product_id")
+  adminId     String?  @map("admin_id")
+  changeQty   Int      @map("change_qty")
+  prevQty     Int      @map("prev_qty")
+  newQty      Int      @map("new_qty")
+  reason      String   // RESTOCK, SALE, ADJUSTMENT, DAMAGED, RETURNED
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  admin   User?   @relation("AdminInventoryLogs", fields: [adminId], references: [id])
+
+  @@map("inventory_logs")
+}
